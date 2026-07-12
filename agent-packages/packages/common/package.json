@@ -1,0 +1,26 @@
+{
+  "name": "supportPilot-common-agent",
+  "version": "2.1.1",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rm -rf ./dist && find . -type f \\( -name \"*.js\" -o -name \"*.js.map\" -o -name \"*.d.ts\" \\) ! -path \"*/node_modules/*\" -delete",
+    "build": "tsc",
+    "test": "jest",
+    "watch": "tsc --watch",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "@langchain/core": "1.1.8"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "zod": "^4.3.5"
+  }
+}

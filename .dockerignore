@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+**/node_modules
+agent-packages/node_modules
+agent-packages/**/node_modules
+agent-packages/**/dist
+
+# Logs
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+*.log
+
+# Version control
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Package manager
+.yarn-cache
+.npm
+
+# Documentation and markdown
+*.md
+!README.md
+
+# Test and coverage
+test
+coverage
+
+# Development configs
+.eslintrc.json
+.prettierrc
+eslint.config.mjs
+.github
+.vscode
+
+# Temporary files
+.DS_Store
+tmp

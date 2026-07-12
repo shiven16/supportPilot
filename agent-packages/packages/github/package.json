@@ -1,0 +1,27 @@
+{
+  "name": "supportPilot-github-agent",
+  "version": "2.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rm -rf ./dist && find . -type f \\( -name \"*.js\" -o -name \"*.js.map\" \\) ! -path \"*/node_modules/*\" -delete",
+    "build": "npm run clean && tsc",
+    "test": "jest",
+    "watch": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "supportPilot-common-agent": "file:../common"
+  },
+  "peerDependencies": {
+    "@langchain/core": "1.1.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "license": "Apache-2.0"
+}

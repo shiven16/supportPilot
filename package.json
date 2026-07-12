@@ -1,0 +1,134 @@
+{
+  "name": "supportpilot",
+  "version": "0.0.1",
+  "description": "",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "workspaces": [
+    "agent-packages/packages/common",
+    "agent-packages/packages/github",
+    "agent-packages/packages/slack"
+  ],
+  "moduleNameMapper": {
+    "@supportpilot/(.*)": "<rootDir>/src/$1"
+  },
+  "scripts": {
+    "build:packages": "npm run build --workspace supportPilot-common-agent && npm run build --workspace supportPilot-github-agent && npm run build --workspace supportPilot-slack-agent",
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch -b swc",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/src/main",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "db:migrate": "sequelize-cli db:migrate",
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "db:migrate:undo:all": "sequelize-cli db:migrate:undo:all",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@langchain/core": "^1.2.2",
+    "@langchain/google-genai": "2.1.3",
+    "@langchain/langgraph": "1.0.7",
+    "@langchain/openai": "1.2.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@n8n/json-schema-to-zod": "^1.6.0",
+    "@nestjs/axios": "^4.0.0",
+    "@nestjs/cache-manager": "^2.3.0",
+    "@nestjs/common": "^11.0.16",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.1.18",
+    "@nestjs/event-emitter": "^3.0.1",
+    "@nestjs/platform-express": "^11.0.16",
+    "@nestjs/schedule": "^5.0.1",
+    "@nestjs/sequelize": "^11.0.0",
+    "@slack/web-api": "^7.8.0",
+    "cache-manager": "4.1.0",
+    "cache-manager-redis-store": "2.0.0",
+    "langchain": "1.2.3",
+    "lodash": "^4.18.1",
+    "pg": "^8.22.0",
+    "pg-hstore": "^2.3.4",
+    "redis": "^4.7.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "sequelize": "^6.37.8",
+    "sequelize-typescript": "^2.1.6",
+    "slack-block-builder": "^2.8.0",
+    "slackify-markdown": "^4.4.0",
+    "supportPilot-common-agent": "file:./agent-packages/packages/common",
+    "supportPilot-github-agent": "file:./agent-packages/packages/github",
+    "supportPilot-slack-agent": "file:./agent-packages/packages/slack",
+    "tsscmp": "^1.0.6",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.2.0",
+    "@eslint/js": "^9.18.0",
+    "@nestjs/cli": "^11.0.11",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@slack/bolt": "^4.2.1",
+    "@swc/cli": "^0.6.0",
+    "@swc/core": "^1.11.5",
+    "@types/cache-manager": "3.4.3",
+    "@types/cache-manager-redis-store": "2.0.4",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.7",
+    "@types/pg": "^8.15.4",
+    "@types/sequelize": "^4.28.20",
+    "@types/supertest": "^6.0.2",
+    "@types/tsscmp": "^1.0.2",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.2",
+    "globals": "^15.14.0",
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "lint-staged": "^15.5.0",
+    "prettier": "^3.4.2",
+    "sequelize-cli": "^6.6.3",
+    "source-map-support": "^0.5.21",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  },
+  "resolutions": {
+    "editorconfig": "1.0.7"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,md}": [
+      "prettier --write"
+    ]
+  }
+}
