@@ -36,7 +36,9 @@ export const baseSearchIssuesOrPullRequestsSchema = z.object({
     .enum(['open', 'closed'])
     .nullish()
     .transform((val) => val ?? undefined)
-    .describe('Filter issues by their status (open or closed)'),
+    .describe(
+      'Filter by status: "open" or "closed". IMPORTANT: Do NOT assume a status unless the user explicitly specifies one. For example, if the user asks for the "latest PR", do NOT add status: "open" — search all PRs regardless of state so the truly latest one is returned.'
+    ),
   sort: z
     .enum(['comments', 'reactions', 'created', 'updated'])
     .nullish()

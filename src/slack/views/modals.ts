@@ -439,14 +439,6 @@ export const publishNotionConnectionModal = async (
           actionId: SLACK_ACTIONS.NOTION_CONNECTION_ACTIONS.API_TOKEN
         })
       ),
-      Image({
-        imageUrl: 'https://cdn.clearfeed.app/quix/notion-page-connection.png',
-        altText: 'Share Notion page with integration',
-        title: 'Important: Share your Notion pages'
-      }),
-      Section({
-        text: 'After connecting, make sure to share your Notion pages with the integration as shown in the image above.'
-      }),
       Input({
         label: 'Default Prompt',
         blockId: 'notion_default_prompt',

@@ -22,6 +22,7 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { z } from 'zod';
 import { ChatPromptTemplate, HumanMessagePromptTemplate } from '@langchain/core/prompts';
 import { RunnableSequence } from '@langchain/core/runnables';
+import { invokeWithStructuredOutput } from './utils';
 
 @Injectable()
 export class LlmService {
@@ -90,12 +91,19 @@ export class LlmService {
       enhancedPreviousMessages.push({
         role: 'system',
         content: `Previous tools you have used in this conversation: ${Object.values(lastToolCalls)
+          .slice(-10)
           .map((call) => {
-            const resultContent =
+            let resultContent =
               typeof call.result === 'string'
                 ? call.result
                 : (call.result?.kwargs?.content ??
                   (call.result ? JSON.stringify(call.result) : ''));
+            
+            // Truncate massive JSON blobs from previous tool calls to prevent token limit errors
+            if (resultContent.length > 500) {
+              resultContent = resultContent.substring(0, 500) + '... [TRUNCATED]';
+            }
+            
             return `Tool "${call.name}" with args ${JSON.stringify(call.args)} returned: ${resultContent}`;
           })
           .join('; ')}`
@@ -313,20 +321,18 @@ Return noise only for acknowledgements, emoji-only messages, or messages that do
 Infer the domain from intent even when the app name is not mentioned. For example, "merge the PR" is github.`),
       HumanMessagePromptTemplate.fromTemplate('{input}')
     ]);
-    const chain = RunnableSequence.from([
-      prompt,
-      llm.withStructuredOutput(
+    try {
+      const result = await invokeWithStructuredOutput(
+        llm,
+        prompt,
         z.object({
           intent: z.enum(['tool_request', 'chat', 'noise']),
           domain: z.string().describe('One domain id from the prompt, or "none".'),
           confidence: z.number().min(0).max(1),
           reason: z.string()
-        })
-      )
-    ]);
-
-    try {
-      const result = await chain.invoke({ input: message });
+        }),
+        { input: message }
+      );
       const validDomains = new Set([
         ...INTEGRATIONS.map((integration) => integration.value),
         'common',
@@ -376,22 +382,33 @@ Available tools:
 ${summaries}`),
       HumanMessagePromptTemplate.fromTemplate('{input}')
     ]);
-    const chain = RunnableSequence.from([
-      prompt,
-      llm.withStructuredOutput(
+    try {
+      const result = await invokeWithStructuredOutput(
+        llm,
+        prompt,
         z.object({
           selectedToolNames: z.array(z.string()),
           reason: z.string()
-        })
-      )
-    ]);
+        }),
+        { input: message }
+      );
+      const normalizedAllNames = allToolNames.map(name => ({ original: name, normalized: name.toLowerCase().replace(/[^a-z0-9]/g, '') }));
+      
+      const selectedToolNames = result.selectedToolNames.map(name => {
+        const normalizedName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        // Find best match: exact normalized match, or one containing the other
+        const match = normalizedAllNames.find(
+          t => t.normalized === normalizedName || 
+               normalizedName.includes(t.normalized) || 
+               t.normalized.includes(normalizedName)
+        );
+        return match?.original;
+      }).filter(Boolean) as string[];
 
-    try {
-      const result = await chain.invoke({ input: message });
-      const validToolNames = new Set(allToolNames);
-      const selectedToolNames = result.selectedToolNames.filter((name) => validToolNames.has(name));
+      const uniqueSelected = [...new Set(selectedToolNames)];
+
       return {
-        selectedToolNames: selectedToolNames.length ? selectedToolNames : allToolNames,
+        selectedToolNames: uniqueSelected.length ? uniqueSelected : allToolNames,
         reason: result.reason
       };
     } catch (error) {

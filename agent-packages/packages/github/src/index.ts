@@ -40,6 +40,21 @@ const loadOctokit = async (): Promise<typeof Octokit> => {
 export class GitHubService implements BaseService<GitHubConfig> {
   private client: OctokitType;
 
+  private _trimIssueData(item: any) {
+    if (!item) return item;
+    return {
+      number: item.number,
+      title: item.title,
+      state: item.state,
+      html_url: item.html_url,
+      created_at: item.created_at,
+      merged: item.merged,
+      merged_at: item.merged_at,
+      user: item.user ? { login: item.user.login } : undefined,
+      body: item.body ? (item.body.length > 200 ? item.body.substring(0, 200) + '... [TRUNCATED]' : item.body) : item.body
+    };
+  }
+
   private constructor(private config: GitHubConfig) {
     this.client = new Octokit({ auth: config.token });
   }
@@ -108,8 +123,8 @@ export class GitHubService implements BaseService<GitHubConfig> {
       const response = await this.client.request('GET /search/issues', {
         q: query,
         per_page: 5,
-        sort,
-        order,
+        sort: sort || 'created',
+        order: order || 'desc',
         page
       });
 
@@ -117,7 +132,7 @@ export class GitHubService implements BaseService<GitHubConfig> {
         success: true,
         data: {
           pagination: `Showing ${response.data.items.length} of ${response.data.total_count} results of page ${page}. Ask the user if they want to see more results.`,
-          issuesOrPullRequests: response.data.items
+          issuesOrPullRequests: response.data.items.map((item: any) => this._trimIssueData(item))
         }
       };
     } catch (error) {
@@ -140,7 +155,10 @@ export class GitHubService implements BaseService<GitHubConfig> {
         repo,
         issue_number: issueNumber
       });
-      return { success: true, data: response.data };
+      if (response.data.body && response.data.body.length > 2000) {
+        response.data.body = response.data.body.substring(0, 2000) + '... [TRUNCATED]';
+      }
+      return { success: true, data: this._trimIssueData(response.data) as any };
     } catch (error) {
       console.error('Error fetching GitHub issue:', error);
       return {
@@ -543,7 +561,10 @@ export class GitHubService implements BaseService<GitHubConfig> {
         repo,
         pull_number
       });
-      return { success: true, data: response.data };
+      if (response.data.body && response.data.body.length > 2000) {
+        response.data.body = response.data.body.substring(0, 2000) + '... [TRUNCATED]';
+      }
+      return { success: true, data: this._trimIssueData(response.data) as any };
     } catch (error) {
       console.error('Error getting GitHub pull request:', error);
       return {
@@ -748,15 +769,15 @@ export class GitHubService implements BaseService<GitHubConfig> {
       const response = await this.client.request('GET /search/issues', {
         q: query,
         per_page: 5,
-        sort,
-        order,
+        sort: sort || 'created',
+        order: order || 'desc',
         page
       });
       return {
         success: true,
         data: {
           pagination: `Showing ${response.data.items.length} of ${response.data.total_count} results of page ${page}. Ask the user if they want to see more results.`,
-          issuesOrPullRequests: response.data.items
+          issuesOrPullRequests: response.data.items.map((item: any) => this._trimIssueData(item))
         }
       };
     } catch (error) {

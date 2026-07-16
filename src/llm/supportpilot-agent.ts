@@ -1,7 +1,8 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AvailableToolsWithConfig, LLMContext, PlanResult, SupportPilotAgentResult } from './types';
 import { tool } from '@langchain/core/tools';
-import { z, toJSONSchema } from 'zod';
+import { z } from 'zod';
+import { toJsonSchema } from '@langchain/core/utils/json_schema';
 import {
   ChatPromptTemplate,
   SystemMessagePromptTemplate,
@@ -18,6 +19,7 @@ import { isEqual } from 'lodash';
 import { Logger } from '@nestjs/common';
 import { encryptForLogs } from '../lib/utils/encryption';
 import { PlanStepSchema } from './schema';
+import { invokeWithStructuredOutput } from './utils';
 
 export class SupportPilotAgent {
   private readonly logger = new Logger(SupportPilotAgent.name);
@@ -332,7 +334,7 @@ export class SupportPilotAgent {
         const cachedSchema = this.schemaCache.get(cacheKey);
         if (cachedSchema) return cachedSchema;
 
-        const jsonSchema = toJSONSchema(tool.schema as unknown as z.ZodTypeAny);
+        const jsonSchema = toJsonSchema(tool.schema as unknown as z.ZodTypeAny);
         const renderedSchema = `${tool.name}: ${tool.description} Args: ${JSON.stringify(jsonSchema, null, 2)}\n`;
         this.schemaCache.set(cacheKey, renderedSchema);
         return renderedSchema;
@@ -345,20 +347,13 @@ export class SupportPilotAgent {
       HumanMessagePromptTemplate.fromTemplate('{input}')
     ]);
 
-    const planChain = RunnableSequence.from([
+    const result: PlanResult = await invokeWithStructuredOutput(
+      llm,
       planPrompt,
-      llm.withStructuredOutput(PlanStepSchema, {
-        method: 'functionCalling'
-      })
-    ]);
-
-    const result: PlanResult = await planChain.invoke(
+      PlanStepSchema,
       {
         chat_history: previousMessages,
         input: message
-      },
-      {
-        callbacks: [new SupportPilotCallBackManager()]
       }
     );
 

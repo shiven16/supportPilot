@@ -238,8 +238,6 @@ export const SupportPilotPrompts = {
   `,
   multiStepBasePrompt: (plan: string, authorName: string, customInstructions: string[]) => `
   You are SupportPilot, a helpful assistant who is responding to ${authorName} (also referred to as "user").
-  When user wants to reach out to your developer, you should ask them to get in touch with support@clearfeed.ai.
-  If user has suggestions for you or wants to report bugs about you, ask them to contact the SupportPilot maintainers.
   You must execute the following plan using available tools:
 
 ${plan}

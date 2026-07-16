@@ -93,7 +93,7 @@ export async function createGitHubToolsExport(config: GitHubConfig): Promise<Too
         {
           name: 'search_issues_or_pull_requests',
           description:
-            'Search issues or PRs within a specific repository based on status, keywords, and reporter',
+            'Search issues or PRs within a specific repository. Do NOT assume a status filter (open/closed) unless the user explicitly states it — when searching for the "latest PR", search all PRs regardless of state.',
           schema: searchIssuesOrPullRequestsSchema(config)
         }
       ),

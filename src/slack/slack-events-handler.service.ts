@@ -132,7 +132,7 @@ export class SlackEventsHandlerService {
       await webClient.apiCall('assistant.threads.setSuggestedPrompts', {
         thread_ts: threadId,
         channel_id: channelId,
-        title: 'Welcome to ClearFeed Agent. Here are some suggestions to get started:',
+        title: 'Welcome to SupportPilot Agent. Here are some suggestions to get started:',
         // Pick 4 random prompts from the list
         prompts: shuffle(prompts).slice(0, 4)
       });
