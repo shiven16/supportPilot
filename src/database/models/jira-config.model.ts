@@ -40,6 +40,10 @@ export class JiraConfig extends Model<
   @Column(DataType.STRING)
   declare url: string;
 
+  @AllowNull(true)
+  @Column(DataType.STRING)
+  declare email: string | null;
+
   @AllowNull(false)
   @Column({
     type: DataType.TEXT
@@ -57,16 +61,16 @@ export class JiraConfig extends Model<
     this.setDataValue('access_token', encrypt(value));
   }
 
-  @AllowNull(false)
   @Column({
-    type: DataType.TEXT
+    type: DataType.TEXT,
+    allowNull: true
   })
-  get refresh_token(): string {
+  get refresh_token(): string | null {
     const value = this.getDataValue('refresh_token') as string;
     if (!value) return value;
     return decrypt(value);
   }
-  set refresh_token(value: string) {
+  set refresh_token(value: string | null) {
     if (!value) {
       this.setDataValue('refresh_token', value);
       return;
@@ -74,13 +78,11 @@ export class JiraConfig extends Model<
     this.setDataValue('refresh_token', encrypt(value));
   }
 
-  @AllowNull(false)
-  @Column(DataType.DATE)
-  declare expires_at: Date;
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare expires_at: Date | null;
 
-  @AllowNull(false)
-  @Column(DataType.ARRAY(DataType.STRING))
-  declare scopes: string[];
+  @Column({ type: DataType.ARRAY(DataType.STRING), allowNull: true })
+  declare scopes: string[] | null;
 
   @Column({
     type: DataType.JSON,

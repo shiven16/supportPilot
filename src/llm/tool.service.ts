@@ -1,5 +1,7 @@
 import { createGitHubToolsExport } from 'supportPilot-github-agent';
+import { createJiraToolsExport } from 'supportPilot-jira-agent';
 import { Injectable } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/sequelize';
 import { SlackWorkspace } from '../database/models';
 import { McpServerCleanupFn, McpService } from '../integrations/mcp.service';
@@ -7,6 +9,7 @@ import { SupportPilotPrompts, SUPPORTED_INTEGRATIONS } from '../lib/constants';
 import { createCommonToolsExport } from 'supportPilot-common-agent';
 import { AvailableToolsWithConfig } from './types';
 import { createSlackToolsExport } from 'supportPilot-slack-agent';
+import { EVENT_NAMES, IntegrationConnectedEvent } from '../types/events';
 
 @Injectable()
 export class ToolService {
@@ -35,6 +38,7 @@ export class ToolService {
 
     const slackWorkspace = await this.slackWorkspaceModel.findByPk(teamId, {
       include: [
+        'jiraConfig',
         'githubConfig',
         'linearConfig',
         'mcpConnections'
@@ -64,6 +68,18 @@ export class ToolService {
           repo: githubConfig.default_config?.repo
         }),
         config: githubConfig
+      };
+    }
+    const jiraConfig = slackWorkspace.jiraConfig;
+    if (jiraConfig?.email && jiraConfig.access_token && shouldLoad('jira')) {
+      tools.jira = {
+        toolKit: createJiraToolsExport({
+          url: jiraConfig.url,
+          email: jiraConfig.email,
+          apiToken: jiraConfig.access_token,
+          projectKey: jiraConfig.default_config?.projectKey
+        }),
+        config: jiraConfig
       };
     }
     // Handle MCP-based integrations
@@ -135,6 +151,11 @@ export class ToolService {
     for (const key of this.availableToolsCache.keys()) {
       if (key.startsWith(`${teamId}:`)) this.availableToolsCache.delete(key);
     }
+  }
+
+  @OnEvent(EVENT_NAMES.JIRA_CONNECTED)
+  handleJiraConnectionChanged(event: IntegrationConnectedEvent) {
+    this.invalidateAvailableTools(event.teamId);
   }
 
   async shutDownMcpServers() {

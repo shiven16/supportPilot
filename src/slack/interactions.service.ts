@@ -94,18 +94,13 @@ export class InteractionsService {
           adminUserIds
         );
         break;
-      case SLACK_ACTIONS.JIRA_CONFIG_MODAL.SUBMIT:
-        const defaultProjectKey = payload.view.state.values.project_key[
-          SLACK_ACTIONS.JIRA_CONFIG_MODAL.PROJECT_KEY_INPUT
-        ].value as string;
-        const defaultJiraPrompt = payload.view.state.values.jira_default_prompt[
-          SLACK_ACTIONS.JIRA_CONFIG_MODAL.DEFAULT_PROMPT
-        ].value as string;
-        this.appHomeService.handleJiraConfigurationSubmitted(
+      case SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.SUBMIT:
+        const jiraConfig = await this.integrationsInstallService.jira(payload);
+        this.appHomeService.handleIntegrationConnected(
           payload.user.id,
           payload.view.team_id,
-          defaultProjectKey,
-          defaultJiraPrompt
+          SUPPORTED_INTEGRATIONS.JIRA,
+          jiraConfig
         );
         break;
       case SLACK_ACTIONS.GITHUB_CONFIG_MODAL.SUBMIT:

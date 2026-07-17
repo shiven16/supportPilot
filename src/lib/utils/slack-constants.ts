@@ -24,9 +24,12 @@ export const SLACK_ACTIONS = {
   DISCONNECT_CONFIRM_MODAL: {
     SUBMIT: 'disconnect_confirm_modal_submit'
   },
-  JIRA_CONFIG_MODAL: {
-    SUBMIT: 'jira-config-modal-submit',
-    PROJECT_KEY_INPUT: 'jira-config-modal-project-key-input',
+  JIRA_CONNECTION_ACTIONS: {
+    SUBMIT: 'submit-jira-connection',
+    URL: 'jira-cloud-url',
+    EMAIL: 'jira-email',
+    API_TOKEN: 'jira-api-token',
+    PROJECT_KEY: 'jira-project-key',
     DEFAULT_PROMPT: 'jira-default-prompt'
   },
   GITHUB_CONFIG_MODAL: {

@@ -27,12 +27,16 @@ export type PostgresConnectionModalArgs = {
   };
 };
 
-export type JiraDefaultConfigModalArgs = {
+export type JiraConnectionModalArgs = {
   triggerId: string;
   teamId: string;
-  callbackId?: string;
-  projectKey: string;
-  defaultPrompt?: string | null;
+  initialValues?: {
+    url?: string;
+    email?: string | null;
+    projectKey?: string;
+    defaultPrompt?: string | null;
+    hasApiToken?: boolean;
+  };
 };
 
 export type GithubDefaultConfig = {

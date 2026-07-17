@@ -43,6 +43,22 @@ import { SLACK_ACTIONS } from '@supportpilot/lib/utils/slack-constants';
 import { Sequelize } from 'sequelize-typescript';
 import { McpService } from './mcp.service';
 import { encryptForLogs } from '@supportpilot/lib/utils/encryption';
+
+const normalizeJiraCloudUrl = (value: string): string => {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new BadRequestException('Enter a valid Jira Cloud URL.');
+  }
+
+  if (url.protocol !== 'https:' || !url.hostname.endsWith('.atlassian.net')) {
+    throw new BadRequestException('Jira Cloud URLs must use https://<site>.atlassian.net.');
+  }
+
+  return url.origin;
+};
+
 @Injectable()
 export class IntegrationsInstallService {
   private readonly logger = new Logger(IntegrationsInstallService.name);
@@ -84,8 +100,6 @@ export class IntegrationsInstallService {
 
   getInstallUrl(tool: (typeof INTEGRATIONS)[number]['value'], state: string): string {
     switch (tool) {
-      case 'jira':
-        return `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${this.configService.get<string>('JIRA_CLIENT_ID')}&scope=${encodeURIComponent('read:jira-work read:jira-user write:jira-work offline_access')}&redirect_uri=${this.configService.get<string>('SELFSERVER_URL')}/integrations/connect/jira&response_type=code&prompt=consent&state=${state}`;
       case 'hubspot':
         return `https://app.hubspot.com/oauth/authorize?client_id=${this.configService.get<string>('HUBSPOT_CLIENT_ID')}&redirect_uri=${encodeURIComponent(this.configService.get<string>('SELFSERVER_URL') + '/integrations/connect/hubspot')}&scope=${encodeURIComponent(HUBSPOT_SCOPES.join(' '))}&state=${state}`;
       case 'github':
@@ -97,60 +111,73 @@ export class IntegrationsInstallService {
     }
   }
 
-  async jira(code: string, state: string): Promise<Partial<ToolInstallState>> {
+  async jira(payload: ViewSubmitAction): Promise<JiraConfig> {
     try {
-      const stateData = await this.cache.get<ToolInstallState>(`install_jira`);
-      if (!stateData) {
-        throw new BadRequestException('State not found');
-      }
-      if (stateData.state !== state) {
-        throw new BadRequestException('Invalid state');
-      }
-      await this.cache.del(`install_jira`);
-      const response = await this.httpService.axiosRef.post(
-        `https://auth.atlassian.com/oauth/token`,
-        {
-          grant_type: 'authorization_code',
-          code,
-          client_id: this.configService.get<string>('JIRA_CLIENT_ID'),
-          client_secret: this.configService.get<string>('JIRA_CLIENT_SECRET'),
-          redirect_uri: `${this.configService.get<string>('SELFSERVER_URL')}/integrations/connect/jira`
-        }
+      const parsed = parseInputBlocksSubmission(
+        payload.view.blocks as KnownBlock[],
+        payload.view.state.values
       );
-      const accessibleResources = await this.httpService.axiosRef.get(
-        `https://api.atlassian.com/oauth/token/accessible-resources`,
-        {
-          headers: {
-            Authorization: `Bearer ${response.data.access_token}`
-          }
-        }
+      const jiraUrl = normalizeJiraCloudUrl(
+        parsed[SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.URL]?.selectedValue as string
       );
-      const jiraSite = accessibleResources.data[0];
+      const email = (parsed[SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.EMAIL]?.selectedValue as string)
+        ?.trim()
+        .toLowerCase();
+      const submittedToken = (
+        parsed[SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.API_TOKEN]?.selectedValue as string | undefined
+      )?.trim();
+      const projectKey = (
+        parsed[SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.PROJECT_KEY]?.selectedValue as string | undefined
+      )?.trim();
+      const defaultPrompt = (
+        parsed[SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.DEFAULT_PROMPT]?.selectedValue as string | undefined
+      )?.trim();
 
-      await this.jiraConfigModel.upsert({
-        id: jiraSite.id,
-        name: jiraSite.name,
-        url: jiraSite.url,
-        scopes: jiraSite.scopes,
-        access_token: response.data.access_token,
-        refresh_token: response.data.refresh_token,
-        expires_at: new Date(Date.now() + response.data.expires_in * 1000),
-        team_id: stateData.teamId
+      if (!email) throw new BadRequestException('Jira email is required.');
+
+      const existingConfig = await this.jiraConfigModel.findOne({
+        where: { team_id: payload.view.team_id }
       });
+      const apiToken = submittedToken || existingConfig?.access_token;
+      if (!apiToken) throw new BadRequestException('Jira API token is required.');
+
+      const authHeader = Buffer.from(`${email}:${apiToken}`).toString('base64');
+      const me = await this.httpService.axiosRef.get(`${jiraUrl}/rest/api/3/myself`, {
+        headers: { Authorization: `Basic ${authHeader}`, Accept: 'application/json' }
+      });
+      if (!me.data?.accountId) throw new BadRequestException('Unable to authenticate with Jira.');
+
+      const values = {
+        name: me.data.displayName || new URL(jiraUrl).hostname,
+        url: jiraUrl,
+        email,
+        access_token: apiToken,
+        refresh_token: null,
+        expires_at: null,
+        scopes: null,
+        default_config: { projectKey: projectKey || undefined },
+        default_prompt: defaultPrompt || null
+      };
+      const jiraConfig = existingConfig
+        ? await existingConfig.update(values)
+        : await this.jiraConfigModel.create({
+            id: `jira-${payload.view.team_id}`,
+            team_id: payload.view.team_id,
+            ...values
+          });
 
       this.eventEmitter.emit(EVENT_NAMES.JIRA_CONNECTED, {
-        teamId: stateData.teamId,
-        appId: stateData.appId,
-        type: SUPPORTED_INTEGRATIONS.JIRA
+        teamId: payload.view.team_id,
+        appId: payload.view.app_id!,
+        type: SUPPORTED_INTEGRATIONS.JIRA,
+        userId: payload.user.id
       } satisfies IntegrationConnectedEvent);
 
-      return {
-        appId: stateData.appId,
-        teamId: stateData.teamId
-      };
+      return jiraConfig;
     } catch (error) {
-      this.logger.error('Failed to connect to Jira:', error);
-      throw new BadRequestException('Failed to connect to Jira');
+      this.logger.error('Failed to connect to Jira Cloud');
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('Invalid Jira Cloud URL, email, or API token.');
     }
   }
 

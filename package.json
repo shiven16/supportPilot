@@ -8,13 +8,14 @@
   "workspaces": [
     "agent-packages/packages/common",
     "agent-packages/packages/github",
+    "agent-packages/packages/jira",
     "agent-packages/packages/slack"
   ],
   "moduleNameMapper": {
     "@supportpilot/(.*)": "<rootDir>/src/$1"
   },
   "scripts": {
-    "build:packages": "npm run build --workspace supportPilot-common-agent && npm run build --workspace supportPilot-github-agent && npm run build --workspace supportPilot-slack-agent",
+    "build:packages": "npm run build --workspace supportPilot-common-agent && npm run build --workspace supportPilot-github-agent && npm run build --workspace supportPilot-jira-agent && npm run build --workspace supportPilot-slack-agent",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -66,6 +67,7 @@
     "slackify-markdown": "^4.4.0",
     "supportPilot-common-agent": "file:./agent-packages/packages/common",
     "supportPilot-github-agent": "file:./agent-packages/packages/github",
+    "supportPilot-jira-agent": "file:./agent-packages/packages/jira",
     "supportPilot-slack-agent": "file:./agent-packages/packages/slack",
     "tsscmp": "^1.0.6",
     "zod": "^4.3.5"

@@ -1,0 +1,25 @@
+{
+  "name": "supportPilot-jira-agent",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "clean": "rm -rf ./dist && find . -type f \\( -name \"*.js\" -o -name \"*.js.map\" -o -name \"*.d.ts\" \\) ! -path \"*/node_modules/*\" -delete",
+    "build": "npm run clean && tsc",
+    "watch": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "axios": "^1.8.4",
+    "supportPilot-common-agent": "file:../common",
+    "zod": "^4.3.5"
+  },
+  "peerDependencies": {
+    "@langchain/core": "1.1.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "license": "Apache-2.0"
+}

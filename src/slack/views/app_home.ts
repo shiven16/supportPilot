@@ -347,7 +347,10 @@ export const getIntegrationInfo = (
         text: 'Connect',
         actionId: SLACK_ACTIONS.INSTALL_TOOL,
         value: integrationValue,
-        url: integration.oauth ? getInstallUrl(integrationValue, teamId) : undefined
+        url:
+          integration.oauth && integrationValue !== SUPPORTED_INTEGRATIONS.JIRA
+            ? getInstallUrl(integrationValue, teamId)
+            : undefined
       }).primary();
 
   return [

@@ -3,7 +3,7 @@ import { SLACK_ACTIONS } from '@supportpilot/lib/utils/slack-constants';
 import { Block, View } from '@slack/web-api';
 import { Bits, Section, Input, Image } from 'slack-block-builder';
 import {
-  JiraDefaultConfigModalArgs,
+  JiraConnectionModalArgs,
   PostgresConnectionModalArgs,
   NotionConnectionModalArgs,
   LinearConnectionModalArgs,
@@ -227,25 +227,60 @@ export const publishManageAdminsModal = async (
   });
 };
 
-export const publishJiraConfigModal = async (
+export const publishJiraConnectionModal = async (
   client: WebClient,
-  args: JiraDefaultConfigModalArgs
+  args: JiraConnectionModalArgs
 ): Promise<void> => {
-  const { triggerId, projectKey } = args;
+  const { triggerId, initialValues } = args;
 
   await client.views.open({
     trigger_id: triggerId,
     view: {
       ...Surfaces.Modal({
-        title: 'Jira Configuration',
+        title: 'Jira Connection',
         submit: 'Submit',
         close: 'Cancel',
-        callbackId: SLACK_ACTIONS.JIRA_CONFIG_MODAL.SUBMIT
+        callbackId: SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.SUBMIT
       }).buildToObject(),
       blocks: BlockCollection([
         Section({
-          text: 'Please enter your Jira Project details:'
+          text: 'Connect SupportPilot to Jira Cloud using an email address and API token.'
         }),
+        Input({
+          label: 'Jira Cloud URL',
+          blockId: 'jira_cloud_url',
+          hint: 'Use your Jira Cloud site URL, for example https://your-team.atlassian.net'
+        }).element(
+          Elements.TextInput({
+            placeholder: 'https://your-team.atlassian.net',
+            actionId: SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.URL,
+            initialValue: initialValues?.url || ''
+          })
+        ),
+        Input({
+          label: 'Jira Email',
+          blockId: 'jira_email'
+        }).element(
+          Elements.TextInput({
+            placeholder: 'you@example.com',
+            actionId: SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.EMAIL,
+            initialValue: initialValues?.email || ''
+          })
+        ),
+        Input({
+          label: 'Jira API Token',
+          blockId: 'jira_api_token',
+          hint: initialValues?.hasApiToken
+            ? 'Your current token is stored securely. Leave this empty to keep it, or enter a new token to replace it.'
+            : 'Create an API token from your Atlassian account security settings.'
+        })
+          .optional(Boolean(initialValues?.hasApiToken))
+          .element(
+            Elements.TextInput({
+              placeholder: 'Atlassian API token',
+              actionId: SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.API_TOKEN
+            })
+          ),
         Input({
           label: 'Project Key',
           blockId: 'project_key',
@@ -255,8 +290,8 @@ export const publishJiraConfigModal = async (
           .element(
             Elements.TextInput({
               placeholder: 'e.g., PROJ',
-              actionId: SLACK_ACTIONS.JIRA_CONFIG_MODAL.PROJECT_KEY_INPUT,
-              initialValue: projectKey
+              actionId: SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.PROJECT_KEY,
+              initialValue: initialValues?.projectKey || ''
             })
           ),
         Input({
@@ -269,8 +304,8 @@ export const publishJiraConfigModal = async (
             Elements.TextInput({
               placeholder: 'When creating or searching Jira issues...',
               multiline: true,
-              actionId: SLACK_ACTIONS.JIRA_CONFIG_MODAL.DEFAULT_PROMPT,
-              initialValue: args.defaultPrompt || ''
+              actionId: SLACK_ACTIONS.JIRA_CONNECTION_ACTIONS.DEFAULT_PROMPT,
+              initialValue: initialValues?.defaultPrompt || ''
             })
           )
       ])

@@ -18,7 +18,7 @@ import {
   publishPostgresConnectionModal,
   publishManageAdminsModal,
   publishAccessControlModal,
-  publishJiraConfigModal,
+  publishJiraConnectionModal,
   publishNotionConnectionModal,
   publishLinearConnectionModal,
   publishMcpConnectionModal,
@@ -176,7 +176,21 @@ export class AppHomeService {
     ]);
     if (!slackWorkspace) return;
     const webClient = new WebClient(slackWorkspace.bot_access_token);
-    if (selectedTool === SUPPORTED_INTEGRATIONS.POSTGRES) {
+    if (selectedTool === SUPPORTED_INTEGRATIONS.JIRA) {
+      await publishJiraConnectionModal(webClient, {
+        triggerId,
+        teamId,
+        initialValues: slackWorkspace.jiraConfig
+          ? {
+              url: slackWorkspace.jiraConfig.url,
+              email: slackWorkspace.jiraConfig.email,
+              projectKey: slackWorkspace.jiraConfig.default_config?.projectKey,
+              defaultPrompt: slackWorkspace.jiraConfig.default_prompt,
+              hasApiToken: Boolean(slackWorkspace.jiraConfig.access_token)
+            }
+          : undefined
+      });
+    } else if (selectedTool === SUPPORTED_INTEGRATIONS.POSTGRES) {
       const initialValues = slackWorkspace.postgresConfig
         ? {
             id: slackWorkspace.postgresConfig.id,
@@ -301,11 +315,16 @@ export class AppHomeService {
             case SUPPORTED_INTEGRATIONS.JIRA:
               const { jiraConfig } = slackWorkspace;
               if (!jiraConfig) return;
-              await publishJiraConfigModal(webClient, {
+              await publishJiraConnectionModal(webClient, {
                 triggerId,
                 teamId,
-                projectKey: jiraConfig.default_config?.projectKey || '',
-                defaultPrompt: jiraConfig.default_prompt
+                initialValues: {
+                  url: jiraConfig.url,
+                  email: jiraConfig.email,
+                  projectKey: jiraConfig.default_config?.projectKey,
+                  defaultPrompt: jiraConfig.default_prompt,
+                  hasApiToken: Boolean(jiraConfig.access_token)
+                }
               });
               break;
             case SUPPORTED_INTEGRATIONS.GITHUB:
@@ -554,32 +573,6 @@ export class AppHomeService {
       view: await this.getHomeView({
         slackWorkspace,
         userId
-      })
-    });
-  }
-
-  async handleJiraConfigurationSubmitted(
-    userId: string,
-    teamId: string,
-    defaultProjectKey: string,
-    defaultJiraPrompt: string
-  ) {
-    const slackWorkspace = await this.slackService.getSlackWorkspace(teamId);
-    if (!slackWorkspace?.jiraConfig) return;
-    const jiraConfig = slackWorkspace.jiraConfig;
-    jiraConfig.default_config = {
-      projectKey: defaultProjectKey
-    };
-    jiraConfig.default_prompt = defaultJiraPrompt;
-    await jiraConfig.save();
-    const webClient = new WebClient(slackWorkspace.bot_access_token);
-    await webClient.views.publish({
-      user_id: userId,
-      view: await this.getHomeView({
-        slackWorkspace,
-        userId,
-        selectedTool: SUPPORTED_INTEGRATIONS.JIRA,
-        connection: jiraConfig
       })
     });
   }

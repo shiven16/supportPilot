@@ -82,6 +82,9 @@ export class SlackController {
     @Param('tool') tool: (typeof INTEGRATIONS)[number]['value'],
     @Query('code') code: string
   ) {
+    if (tool === 'jira') {
+      throw new BadRequestException('Connect Jira from the SupportPilot App Home tab.');
+    }
     const result = await this.slackService.install(code, tool);
     if (!result) throw new BadRequestException();
     const state = Math.random().toString(36).substring(2, 15);

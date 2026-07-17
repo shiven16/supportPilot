@@ -378,6 +378,10 @@ Infer the domain from intent even when the app name is not mentioned. For exampl
 You only have tool names and one-line descriptions. Do not infer parameter schemas.
 Include supporting read/status/search tools when an action needs context before execution.
 
+Critical dependencies:
+- "transition_jira_issue" requires a transition ID. You MUST always include "get_jira_issue_transitions" whenever "transition_jira_issue" is selected.
+- "assign_jira_issue" requires a Jira account ID. You MUST always include "search_jira_users" whenever "assign_jira_issue" is selected.
+
 Available tools:
 ${summaries}`),
       HumanMessagePromptTemplate.fromTemplate('{input}')
@@ -396,10 +400,13 @@ ${summaries}`),
       
       const selectedToolNames = result.selectedToolNames.map(name => {
         const normalizedName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        // Find best match: exact normalized match, or one containing the other
+        // First try an exact match
+        const exactMatch = normalizedAllNames.find(t => t.normalized === normalizedName);
+        if (exactMatch) return exactMatch.original;
+
+        // Fallback to substring matching
         const match = normalizedAllNames.find(
-          t => t.normalized === normalizedName || 
-               normalizedName.includes(t.normalized) || 
+          t => normalizedName.includes(t.normalized) || 
                t.normalized.includes(normalizedName)
         );
         return match?.original;
