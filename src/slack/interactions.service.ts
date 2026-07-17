@@ -72,18 +72,7 @@ export class InteractionsService {
           postgresConfig
         );
         break;
-      case SLACK_ACTIONS.OPENAI_API_KEY_MODAL.SUBMIT:
-        const openaiApiKey = payload.view.state.values.openai_api_key.openai_api_key_input.value;
-        if (!openaiApiKey) {
-          this.logger.warn('OpenAI API key not found', { payload });
-          return;
-        }
-        this.appHomeService.handleOpenaiApiKeySubmitted(
-          payload.user.id,
-          payload.view.team_id,
-          openaiApiKey
-        );
-        break;
+
       case SLACK_ACTIONS.MANAGE_ADMINS:
         const adminUserIds = payload.view.state.values.admin_user_ids[
           SLACK_ACTIONS.MANAGE_ADMINS_INPUT
@@ -103,27 +92,40 @@ export class InteractionsService {
           jiraConfig
         );
         break;
-      case SLACK_ACTIONS.GITHUB_CONFIG_MODAL.SUBMIT:
-        const defaultRepo = payload.view.state.values.repo[
-          SLACK_ACTIONS.GITHUB_CONFIG_MODAL.REPO_INPUT
-        ].value as string;
-        const defaultOwner = payload.view.state.values.owner[
-          SLACK_ACTIONS.GITHUB_CONFIG_MODAL.OWNER_INPUT
-        ].value as string;
-        const defaultGithubPrompt = payload.view.state.values.github_default_prompt[
-          SLACK_ACTIONS.GITHUB_CONFIG_MODAL.DEFAULT_PROMPT
-        ].value as string;
-        const default_config = {
-          repo: defaultRepo,
-          owner: defaultOwner
-        };
-        this.appHomeService.handleGithubConfigurationSubmitted(
-          payload.user.id,
-          payload.view.team_id,
-          default_config,
-          defaultGithubPrompt
-        );
-        break;
+      case SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.SUBMIT:
+        try {
+          this.integrationsInstallService
+            .github(payload)
+            .then(async (githubConfig) => {
+              await displaySuccessModal(new WebClient(slackWorkspace.bot_access_token), {
+                text: 'GitHub connected successfully',
+                viewId: payload.view.id
+              });
+              this.appHomeService.handleIntegrationConnected(
+                payload.user.id,
+                payload.view.team_id,
+                SUPPORTED_INTEGRATIONS.GITHUB,
+                githubConfig
+              );
+            })
+            .catch((error) => {
+              return displayErrorModal({
+                error,
+                backgroundCaller: true,
+                viewId: payload.view.id,
+                web: new WebClient(slackWorkspace.bot_access_token)
+              });
+            });
+          return displayLoadingModal('Please Wait');
+        } catch (error) {
+          console.error(error);
+          return displayErrorModal({
+            error,
+            backgroundCaller: true,
+            viewId: payload.view.id,
+            web: new WebClient(slackWorkspace.bot_access_token)
+          });
+        }
       case SLACK_ACTIONS.MANAGE_ACCESS_CONTROLS:
         const allowedChannels = payload.view.state.values.allowed_channel_ids[
           SLACK_ACTIONS.ALLOWED_CHANNELS_SELECT

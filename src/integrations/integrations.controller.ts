@@ -19,21 +19,6 @@ export class IntegrationsController {
     };
   }
 
-  @Get('connect/github')
-  @Redirect()
-  async github(@Query('code') code: string, @Query('state') state: string) {
-    if (!code || !state) {
-      return HttpStatus.BAD_REQUEST;
-    }
-
-    const result = await this.integrationsInstallService.github(code, state);
-
-    return {
-      url: `slack://app?team=${result.teamId}&id=${result.appId}&tab=messages`,
-      statusCode: 302
-    };
-  }
-
   @Get('connect/salesforce')
   @Redirect()
   async salesforce(@Query('code') code: string, @Query('state') state: string) {

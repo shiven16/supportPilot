@@ -11,7 +11,7 @@ import {
   DisplayErrorModalResponse,
   UpdateModalResponsePayload,
   McpConnectionModalArgs,
-  GithubDefaultConfigModalArgs,
+  GithubConnectionModalArgs,
   SalesforceConfigModalArgs,
   HubspotConfigModalArgs,
   OktaConnectionModalArgs,
@@ -153,40 +153,6 @@ export const publishPostgresConnectionModal = async (
   }
 };
 
-export const publishOpenaiKeyModal = async (
-  client: WebClient,
-  args: {
-    triggerId: string;
-    teamId: string;
-  }
-): Promise<void> => {
-  await client.views.open({
-    trigger_id: args.triggerId,
-    view: {
-      ...Surfaces.Modal({
-        title: 'OpenAI Key',
-        submit: 'Submit',
-        close: 'Cancel',
-        callbackId: SLACK_ACTIONS.OPENAI_API_KEY_MODAL.SUBMIT
-      }).buildToObject(),
-      blocks: BlockCollection([
-        Section({
-          text: 'Please enter your OpenAI API key:'
-        }),
-        Input({
-          label: 'OpenAI API Key',
-          blockId: 'openai_api_key'
-        }).element(
-          Elements.TextInput({
-            placeholder: 'sk-...',
-            actionId: SLACK_ACTIONS.OPENAI_API_KEY_MODAL.OPENAI_API_KEY_INPUT
-          })
-        )
-      ])
-    }
-  });
-};
-
 export const publishManageAdminsModal = async (
   client: WebClient,
   args: {
@@ -313,63 +279,78 @@ export const publishJiraConnectionModal = async (
   });
 };
 
-export const publishGithubConfigModal = async (
+export const publishGithubConnectionModal = async (
   client: WebClient,
-  args: GithubDefaultConfigModalArgs
+  args: GithubConnectionModalArgs
 ): Promise<void> => {
   const { triggerId, initialValues } = args;
+  const hasToken = Boolean(initialValues?.hasExistingToken);
 
   await client.views.open({
     trigger_id: triggerId,
     view: {
       ...Surfaces.Modal({
-        title: 'GitHub Configuration',
+        title: 'GitHub Connection',
         submit: 'Submit',
         close: 'Cancel',
-        callbackId: SLACK_ACTIONS.GITHUB_CONFIG_MODAL.SUBMIT
+        callbackId: SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.SUBMIT
       }).buildToObject(),
       blocks: BlockCollection([
         Section({
-          text: 'Please enter your GitHub repository details:'
+          text: 'Connect SupportPilot to GitHub using a Personal Access Token (PAT).'
         }),
         Input({
-          label: 'Repository',
+          label: 'Personal Access Token',
+          blockId: 'github_pat',
+          hint: hasToken
+            ? 'A token is already saved. Enter a new token only to rotate it.'
+            : 'Create a token at github.com/settings/tokens with repo and read:user scopes.'
+        })
+          .optional(hasToken)
+          .element(
+            Elements.TextInput({
+              placeholder: hasToken ? '(leave blank to keep existing token)' : 'ghp_xxxxxxxxxxxx',
+              actionId: SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.PAT
+            })
+          ),
+        Input({
+          label: 'Default Repository',
           blockId: 'repo',
-          hint: 'SupportPilot will default to this repository for answering queries and performing tasks.'
+          hint: 'SupportPilot will default to this repository when none is specified.'
         })
           .optional(true)
           .element(
             Elements.TextInput({
               placeholder: 'e.g., my-awesome-repo',
-              actionId: SLACK_ACTIONS.GITHUB_CONFIG_MODAL.REPO_INPUT,
+              actionId: SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.REPO_INPUT,
               initialValue: initialValues?.repo || ''
             })
           ),
         Input({
-          label: 'Repository Owner',
+          label: 'Default Repository Owner',
           blockId: 'owner',
-          hint: 'SupportPilot will default to this owner for answering queries and performing tasks.'
+          hint: 'The GitHub username or org that owns the default repository.'
         })
           .optional(true)
           .element(
             Elements.TextInput({
               placeholder: 'e.g., org-name',
-              actionId: SLACK_ACTIONS.GITHUB_CONFIG_MODAL.OWNER_INPUT,
+              actionId: SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.OWNER_INPUT,
               initialValue: initialValues?.owner || ''
             })
           ),
         Input({
           label: 'Default Prompt',
           blockId: 'github_default_prompt',
-          hint: 'Please provide a default prompt for GitHub. This will be used when SupportPilot needs to interact with repositories, issues, or pull requests.'
+          hint: 'Custom instructions for how SupportPilot should interact with GitHub.'
         })
           .optional(true)
           .element(
             Elements.TextInput({
               placeholder: 'When searching issues or PRs on GitHub...',
               multiline: true,
-              actionId: SLACK_ACTIONS.GITHUB_CONFIG_MODAL.DEFAULT_PROMPT,
-              initialValue: args.initialValues?.defaultPrompt || ''
+              actionId: SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.DEFAULT_PROMPT,
+              initialValue: initialValues?.defaultPrompt || ''
             })
           )
       ])

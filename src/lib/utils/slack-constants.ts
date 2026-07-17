@@ -2,14 +2,8 @@ export const SLACK_ACTIONS = {
   CONNECT_TOOL: 'connect-tool-action',
   INSTALL_TOOL: 'install-tool-action',
   INSTALL_MCP_SERVER: 'install-mcp-server-action',
-  ADD_OPENAI_KEY: 'add-openai-key',
   MANAGE_ADMINS: 'manage-admins',
   MANAGE_ADMINS_INPUT: 'manage-admins-input',
-  OPENAI_API_KEY_OVERFLOW_MENU: 'openai-api-key-overflow-menu',
-  OPENAI_API_KEY_MODAL: {
-    SUBMIT: 'submit-openai-key',
-    OPENAI_API_KEY_INPUT: 'openai_api_key_input'
-  },
   POSTGRES_CONNECTION_ACTIONS: {
     HOST: 'postgres_host',
     PORT: 'postgres_port',
@@ -32,8 +26,9 @@ export const SLACK_ACTIONS = {
     PROJECT_KEY: 'jira-project-key',
     DEFAULT_PROMPT: 'jira-default-prompt'
   },
-  GITHUB_CONFIG_MODAL: {
-    SUBMIT: 'github-config-modal-submit',
+  GITHUB_CONNECTION_ACTIONS: {
+    SUBMIT: 'github-connection-modal-submit',
+    PAT: 'github-pat-input',
     REPO_INPUT: 'github-config-modal-repo-input',
     OWNER_INPUT: 'github-config-modal-owner-input',
     DEFAULT_PROMPT: 'github-default-prompt'

@@ -40,14 +40,21 @@ export type JiraConnectionModalArgs = {
 };
 
 export type GithubDefaultConfig = {
-  repo: string;
-  owner: string;
+  repo?: string | null;
+  owner?: string | null;
   defaultPrompt?: string | null;
 };
 
-export type GithubDefaultConfigModalArgs = {
+export type GithubConnectionModalArgs = {
   triggerId: string;
-  initialValues: GithubDefaultConfig;
+  teamId: string;
+  initialValues?: {
+    username?: string;
+    repo?: string | null;
+    owner?: string | null;
+    defaultPrompt?: string | null;
+    hasExistingToken?: boolean;
+  };
 };
 
 export type NotionConnectionModalArgs = {

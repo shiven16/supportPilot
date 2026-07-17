@@ -181,55 +181,7 @@ export const getToolConnectionView = (
   ];
 };
 
-export const getOpenAIView = (slackWorkspace: SlackWorkspace): BlockBuilder[] => {
-  if (slackWorkspace.isOpenAIKeySet)
-    return [
-      Blocks.Section({
-        text: `${Md.emoji('white_check_mark')} OpenAI API key is already set.`
-      }).accessory(
-        Elements.OverflowMenu({ actionId: SLACK_ACTIONS.OPENAI_API_KEY_OVERFLOW_MENU }).options([
-          Bits.Option({
-            text: `${Md.emoji('pencil')} Edit`,
-            value: 'edit'
-          }),
-          Bits.Option({
-            text: `${Md.emoji('no_entry')} Remove`,
-            value: 'remove'
-          })
-        ])
-      )
-    ];
 
-  const createdAt = new Date(slackWorkspace.created_at);
-  const trialEndDate = new Date(createdAt.getTime() + TRIAL_DAYS * 1000 * 60 * 60 * 24);
-  const currentDate = new Date();
-  const daysRemaining = Math.floor(
-    (trialEndDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)
-  );
-
-  let message = '';
-  if (daysRemaining >= 0) {
-    message = `${Md.emoji('rocket')} *Trial Mode Active*\n`;
-    if (daysRemaining === 0) {
-      message += 'Your trial will expire today';
-    } else {
-      message += `Your trial will expire in ${daysRemaining} day${daysRemaining > 1 ? 's' : ''}`;
-    }
-    message += `\nTo continue using SupportPilot after the trial, please enter your OpenAI API key.`;
-  } else {
-    message = `Your trial has expired. Please enter your OpenAI API key to continue using SupportPilot.`;
-  }
-  return [
-    Blocks.Section({
-      text: message
-    }).accessory(
-      Elements.Button({
-        text: 'Add OpenAI Key',
-        actionId: SLACK_ACTIONS.ADD_OPENAI_KEY
-      }).primary()
-    )
-  ];
-};
 
 export const getConnectionInfo = (connection: HomeViewArgs['connection']): string => {
   if (!connection) return '';
@@ -348,7 +300,9 @@ export const getIntegrationInfo = (
         actionId: SLACK_ACTIONS.INSTALL_TOOL,
         value: integrationValue,
         url:
-          integration.oauth && integrationValue !== SUPPORTED_INTEGRATIONS.JIRA
+          integration.oauth &&
+          integrationValue !== SUPPORTED_INTEGRATIONS.JIRA &&
+          integrationValue !== SUPPORTED_INTEGRATIONS.GITHUB
             ? getInstallUrl(integrationValue, teamId)
             : undefined
       }).primary();

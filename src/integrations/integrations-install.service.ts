@@ -1,8 +1,7 @@
 import {
   INTEGRATIONS,
   SUPPORTED_INTEGRATIONS,
-  HUBSPOT_SCOPES,
-  GITHUB_SCOPES
+  HUBSPOT_SCOPES
 } from '@supportpilot/lib/constants';
 import { BadRequestException, HttpException, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,7 +14,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   HubspotTokenResponse,
   HubspotHubInfo,
-  GithubTokenResponse,
   GitHubInfo,
   SalesforceTokenResponse,
   SalesforceTokenIntrospectionResponse
@@ -102,8 +100,6 @@ export class IntegrationsInstallService {
     switch (tool) {
       case 'hubspot':
         return `https://app.hubspot.com/oauth/authorize?client_id=${this.configService.get<string>('HUBSPOT_CLIENT_ID')}&redirect_uri=${encodeURIComponent(this.configService.get<string>('SELFSERVER_URL') + '/integrations/connect/hubspot')}&scope=${encodeURIComponent(HUBSPOT_SCOPES.join(' '))}&state=${state}`;
-      case 'github':
-        return `https://github.com/login/oauth/authorize?client_id=${this.configService.get<string>('GITHUB_CLIENT_ID')}&scope=${encodeURIComponent(GITHUB_SCOPES.join(','))}&redirect_uri=${encodeURIComponent(this.configService.get<string>('SELFSERVER_URL') + '/integrations/connect/github')}&state=${state}`;
       case 'salesforce':
         return `https://login.salesforce.com/services/oauth2/authorize?client_id=${this.configService.get<string>('SALESFORCE_CONSUMER_KEY')}&redirect_uri=${encodeURIComponent(this.configService.get<string>('SELFSERVER_URL') + '/integrations/connect/salesforce')}&response_type=code&state=${state}`;
       default:
@@ -249,71 +245,64 @@ export class IntegrationsInstallService {
     }
   }
 
-  async github(code: string, state: string): Promise<Partial<ToolInstallState>> {
+  async github(payload: ViewSubmitAction): Promise<GithubConfig> {
     try {
-      // Step 0: Retrieve state from cache
-      const stateData = await this.cache.get<ToolInstallState>('install_github');
-      if (!stateData) {
-        throw new BadRequestException('State not found');
-      }
-      if (stateData.state !== state) {
-        throw new BadRequestException('Invalid state');
-      }
-      await this.cache.del('install_github');
-
-      // Step 1: Get GitHub credentials from config
-      const clientId = this.configService.get<string>('GITHUB_CLIENT_ID');
-      const clientSecret = this.configService.get<string>('GITHUB_CLIENT_SECRET');
-      if (!clientId || !clientSecret) {
-        throw new BadRequestException('Missing GitHub client configuration');
-      }
-
-      // Step 2: Exchange code for an access token
-      const response = await this.httpService.axiosRef.post<GithubTokenResponse>(
-        'https://github.com/login/oauth/access_token',
-        { client_id: clientId, client_secret: clientSecret, code },
-        { headers: { Accept: 'application/json' } }
+      const parsed = parseInputBlocksSubmission(
+        payload.view.blocks as KnownBlock[],
+        payload.view.state.values
       );
-      const access_token = response.data.access_token as string;
-      if (!response.data.scope) {
-        throw new BadRequestException(
-          'No scopes provided. Please ensure the app has necessary permissions.'
-        );
-      }
-      const scopes = response.data.scope.split(',');
+      const submittedToken = (
+        parsed[SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.PAT]?.selectedValue as string | undefined
+      )?.trim();
+      const repo = (
+        parsed[SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.REPO_INPUT]?.selectedValue as string | undefined
+      )?.trim() || null;
+      const owner = (
+        parsed[SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.OWNER_INPUT]?.selectedValue as string | undefined
+      )?.trim() || null;
+      const defaultPrompt = (
+        parsed[SLACK_ACTIONS.GITHUB_CONNECTION_ACTIONS.DEFAULT_PROMPT]?.selectedValue as string | undefined
+      )?.trim() || null;
 
-      // Step 3: Fetch user details from GitHub
+      const existingConfig = await this.githubConfigModel.findOne({
+        where: { team_id: payload.view.team_id }
+      });
+      const accessToken = submittedToken || existingConfig?.access_token;
+      if (!accessToken) throw new BadRequestException('GitHub Personal Access Token is required.');
+
+      // Validate the PAT by calling GitHub's /user endpoint
       const userResponse = await this.httpService.axiosRef.get<GitHubInfo>(
         'https://api.github.com/user',
-        {
-          headers: { Authorization: `token ${access_token}` }
-        }
+        { headers: { Authorization: `token ${accessToken}` } }
       );
       const { id, login, avatar_url } = userResponse.data;
+      if (!login) throw new BadRequestException('Unable to authenticate with GitHub.');
 
-      // Store GitHub authentication details
-      await this.githubConfigModel.upsert({
+      const values = {
         github_id: id,
-        access_token,
+        access_token: accessToken,
         avatar: avatar_url,
         username: login,
-        team_id: stateData.teamId,
-        scopes
-      });
+        scopes: null,
+        team_id: payload.view.team_id,
+        default_config: { repo: repo || undefined, owner: owner || undefined },
+        default_prompt: defaultPrompt
+      };
+
+      const [githubConfig] = await this.githubConfigModel.upsert(values);
 
       this.eventEmitter.emit(EVENT_NAMES.GITHUB_CONNECTED, {
-        teamId: stateData.teamId,
-        appId: stateData.appId,
-        type: SUPPORTED_INTEGRATIONS.GITHUB
+        teamId: payload.view.team_id,
+        appId: payload.view.app_id!,
+        type: SUPPORTED_INTEGRATIONS.GITHUB,
+        userId: payload.user.id
       } satisfies IntegrationConnectedEvent);
 
-      return {
-        appId: stateData.appId,
-        teamId: stateData.teamId
-      };
+      return githubConfig;
     } catch (error) {
       this.logger.error('Failed to connect to GitHub:', error);
-      throw new BadRequestException('Failed to connect to GitHub');
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('Invalid GitHub Personal Access Token.');
     }
   }
 

@@ -7,7 +7,6 @@ import {
   getAccessControlView,
   getPreferencesView,
   getOnboardingView,
-  getOpenAIView,
   getToolConnectionView,
   getIntegrationInfo,
   getNonAdminView,
@@ -22,9 +21,8 @@ import {
   publishNotionConnectionModal,
   publishLinearConnectionModal,
   publishMcpConnectionModal,
-  publishGithubConfigModal,
+  publishGithubConnectionModal,
   publishSalesforceConfigModal,
-  publishOpenaiKeyModal,
   publishOktaConnectionModal,
   publishHubspotConfigModal,
   publishDisconnectConfirmationModal,
@@ -35,7 +33,7 @@ import { INTEGRATIONS, SupportPilotUserAccessLevel, SUPPORTED_INTEGRATIONS } fro
 import { SlackService } from './slack.service';
 import { SlackWorkspace, PostgresConfig } from '@supportpilot/database/models';
 import { IntegrationsService } from 'src/integrations/integrations.service';
-import { HomeViewArgs, GithubDefaultConfig } from './views/types';
+import { HomeViewArgs, GithubDefaultConfig, GithubConnectionModalArgs } from './views/types';
 import { Md } from 'slack-block-builder';
 import { Blocks } from 'slack-block-builder';
 import { BlockCollection } from 'slack-block-builder';
@@ -79,10 +77,7 @@ export class AppHomeService {
         if (action.type !== 'button') return;
         this.handleInstallMcpServer(action, teamId, userId, triggerId);
         break;
-      case SLACK_ACTIONS.ADD_OPENAI_KEY:
-        if (action.type !== 'button') return;
-        this.handleAddOpenaiKey(action, teamId, userId, triggerId);
-        break;
+
       case SLACK_ACTIONS.MANAGE_ADMINS:
         if (action.type !== 'button') return;
         this.handleManageAdmins(action, teamId, userId, triggerId);
@@ -91,10 +86,7 @@ export class AppHomeService {
         if (action.type !== 'overflow') return;
         this.handleConnectionOverflowMenu(action, teamId, userId, triggerId);
         break;
-      case SLACK_ACTIONS.OPENAI_API_KEY_OVERFLOW_MENU:
-        if (action.type !== 'overflow') return;
-        this.handleOpenaiApiKeyOverflowMenu(action, teamId, userId, triggerId);
-        break;
+
       case SLACK_ACTIONS.CONNECT_TOOL:
         if (action.type !== 'static_select') return;
         this.handleConnectTool(action, teamId, userId);
@@ -271,6 +263,20 @@ export class AppHomeService {
         userId,
         initialValues
       });
+    } else if (selectedTool === SUPPORTED_INTEGRATIONS.GITHUB) {
+      await publishGithubConnectionModal(webClient, {
+        triggerId,
+        teamId,
+        initialValues: slackWorkspace.githubConfig
+          ? {
+              username: slackWorkspace.githubConfig.username,
+              repo: slackWorkspace.githubConfig.default_config?.repo,
+              owner: slackWorkspace.githubConfig.default_config?.owner,
+              defaultPrompt: slackWorkspace.githubConfig.default_prompt,
+              hasExistingToken: Boolean(slackWorkspace.githubConfig.access_token)
+            }
+          : undefined
+      });
     }
   }
 
@@ -330,12 +336,15 @@ export class AppHomeService {
             case SUPPORTED_INTEGRATIONS.GITHUB:
               const { githubConfig } = slackWorkspace;
               if (!githubConfig) return;
-              await publishGithubConfigModal(webClient, {
+              await publishGithubConnectionModal(webClient, {
                 triggerId,
+                teamId,
                 initialValues: {
-                  repo: githubConfig.default_config?.repo || '',
-                  owner: githubConfig.default_config?.owner || '',
-                  defaultPrompt: githubConfig.default_prompt
+                  username: githubConfig.username,
+                  repo: githubConfig.default_config?.repo,
+                  owner: githubConfig.default_config?.owner,
+                  defaultPrompt: githubConfig.default_prompt,
+                  hasExistingToken: Boolean(githubConfig.access_token)
                 }
               });
               break;
@@ -482,70 +491,6 @@ export class AppHomeService {
     });
   }
 
-  async handleAddOpenaiKey(
-    action: ButtonAction,
-    teamId: string,
-    userId: string,
-    triggerId: string
-  ) {
-    const slackWorkspace = await this.slackService.getSlackWorkspace(teamId);
-    if (!slackWorkspace) return;
-    const webClient = new WebClient(slackWorkspace.bot_access_token);
-    await publishOpenaiKeyModal(webClient, {
-      triggerId,
-      teamId
-    });
-  }
-
-  async handleOpenaiApiKeySubmitted(userId: string, teamId: string, openaiApiKey: string) {
-    const slackWorkspace = await this.slackService.getSlackWorkspace(teamId);
-    if (!slackWorkspace) return;
-    slackWorkspace.openai_key = openaiApiKey;
-    await slackWorkspace.save();
-    const webClient = new WebClient(slackWorkspace.bot_access_token);
-    await webClient.views.publish({
-      user_id: userId,
-      view: await this.getHomeView({
-        slackWorkspace,
-        connection: undefined,
-        userId
-      })
-    });
-  }
-
-  async handleOpenaiApiKeyOverflowMenu(
-    action: OverflowAction,
-    teamId: string,
-    userId: string,
-    triggerId: string
-  ) {
-    const selectedOption = action.selected_option?.value as 'edit' | 'remove' | undefined;
-    if (!selectedOption) return;
-    const slackWorkspace = await this.slackService.getSlackWorkspace(teamId);
-    if (!slackWorkspace) return;
-    const webClient = new WebClient(slackWorkspace.bot_access_token);
-    switch (selectedOption) {
-      case 'edit':
-        await publishOpenaiKeyModal(webClient, {
-          triggerId,
-          teamId
-        });
-        break;
-      case 'remove':
-        slackWorkspace.openai_key = null;
-        await slackWorkspace.save();
-        await webClient.views.publish({
-          user_id: userId,
-          view: await this.getHomeView({
-            slackWorkspace,
-            connection: undefined,
-            userId
-          })
-        });
-        break;
-    }
-  }
-
   private async handleManageAdmins(
     action: ButtonAction,
     teamId: string,
@@ -577,29 +522,6 @@ export class AppHomeService {
     });
   }
 
-  async handleGithubConfigurationSubmitted(
-    userId: string,
-    teamId: string,
-    defaultConfig: GithubDefaultConfig,
-    defaultGithubPrompt: string
-  ) {
-    const slackWorkspace = await this.slackService.getSlackWorkspace(teamId);
-    if (!slackWorkspace?.githubConfig) return;
-    const githubConfig = slackWorkspace.githubConfig;
-    githubConfig.default_config = defaultConfig;
-    githubConfig.default_prompt = defaultGithubPrompt;
-    await githubConfig.save();
-    const webClient = new WebClient(slackWorkspace.bot_access_token);
-    await webClient.views.publish({
-      user_id: userId,
-      view: await this.getHomeView({
-        slackWorkspace,
-        userId,
-        selectedTool: SUPPORTED_INTEGRATIONS.GITHUB,
-        connection: githubConfig
-      })
-    });
-  }
 
   async handleIntegrationConnected(
     userId: string,
@@ -657,15 +579,15 @@ export class AppHomeService {
     if (slackWorkspace.isAdmin(args.userId)) {
       blocks.push(...getAccessControlView());
       blocks.push(...getPreferencesView());
-      blocks.push(...getOpenAIView(slackWorkspace));
-	      if (
-	        slackWorkspace.openai_key ||
-	        process.env.OPENAI_API_KEY ||
-	        process.env.GEMINI_API_KEY ||
-	        process.env.GROQ_API_KEY ||
-	        process.env.OPENROUTER_API_KEY ||
-	        process.env.OPEN_ROUTER_API_KEY
-	      ) {
+      
+      const isAiConfigured =
+        process.env.OPENAI_API_KEY ||
+        process.env.GEMINI_API_KEY ||
+        process.env.GROQ_API_KEY ||
+        process.env.OPENROUTER_API_KEY ||
+        process.env.OPEN_ROUTER_API_KEY;
+
+      if (isAiConfigured) {
         blocks.push(Blocks.Divider());
         blocks.push(...getToolConnectionView(selectedTool, mcpConnections, slackWorkspace));
         if (selectedTool)

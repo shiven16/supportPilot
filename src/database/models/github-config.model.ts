@@ -47,9 +47,8 @@ export class GithubConfig extends Model<
   @Column(DataType.STRING)
   declare username: string;
 
-  @AllowNull(false)
-  @Column(DataType.ARRAY(DataType.STRING))
-  declare scopes: string[];
+  @Column({ type: DataType.ARRAY(DataType.STRING), allowNull: true })
+  declare scopes: string[] | null;
 
   @Unique
   @ForeignKey(() => SlackWorkspace)
