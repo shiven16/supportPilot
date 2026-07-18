@@ -111,6 +111,8 @@ jobs:
             SLACK_CLIENT_ID=${{ secrets.SLACK_CLIENT_ID }}
             SLACK_CLIENT_SECRET=${{ secrets.SLACK_CLIENT_SECRET }}
             SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }}
+            SELFSERVER_URL=${{ secrets.SELFSERVER_URL }}
+            NODE_ENV=production
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
