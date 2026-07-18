@@ -1,0 +1,125 @@
+name: Deploy to AWS ECS
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: "us-east-1"
+  PROJECT_NAME: "supportpilot"
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build, Terraform Apply, and Deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" -backend-config="key=supportpilot/terraform.tfstate" -backend-config="region=${{ env.AWS_REGION }}"
+        # Make sure you create the S3 bucket specified in TF_STATE_BUCKET secret manually beforehand
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: terraform apply -auto-approve
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ env.PROJECT_NAME }}-repo
+          IMAGE_TAG: latest
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run DB Migrations
+        env:
+          NODE_ENV: production
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        run: npm run db:migrate
+
+      - name: Render Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          # Note: Fargate tasks require a task definition JSON. 
+          # In this setup, we'll fetch the latest active task definition from ECS,
+          # replace the image, and then register a new revision.
+          task-definition-family: ${{ env.PROJECT_NAME }}-task
+          container-name: app
+          image: ${{ steps.build-image.outputs.image }}
+          
+      - name: Download latest task definition
+        run: |
+          aws ecs describe-task-definition --task-definition ${{ env.PROJECT_NAME }}-task --query taskDefinition > task-definition.json
+
+      - name: Fill in the new image ID and environment variables in the Amazon ECS task definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: app
+          image: ${{ steps.build-image.outputs.image }}
+          environment-variables: |
+            DB_HOST=${{ secrets.DB_HOST }}
+            DB_PORT=${{ secrets.DB_PORT }}
+            DB_USER=${{ secrets.DB_USER }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            DB_NAME=${{ secrets.DB_NAME }}
+            REDIS_HOST=${{ secrets.REDIS_HOST }}
+            REDIS_PORT=${{ secrets.REDIS_PORT }}
+            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+            SLACK_CLIENT_ID=${{ secrets.SLACK_CLIENT_ID }}
+            SLACK_CLIENT_SECRET=${{ secrets.SLACK_CLIENT_SECRET }}
+            SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+            OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ env.PROJECT_NAME }}-service
+          cluster: ${{ env.PROJECT_NAME }}-cluster
+          wait-for-service-stability: true

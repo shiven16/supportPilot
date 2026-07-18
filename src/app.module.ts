@@ -28,14 +28,16 @@ import { RetentionService } from './lib/retention/retention.service';
         // Check if Redis config is valid
         const host = configService.get<string>('REDIS_HOST')!;
         const port = configService.get<number>('REDIS_PORT')!;
+        const password = configService.get<string>('REDIS_PASSWORD');
 
         return {
           store: redisStore as any,
           host,
           port,
+          password,
           ttl: 60,
           prefix: 'supportpilot:',
-          tls: process.env.NODE_ENV === 'production'
+          tls: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
         };
       },
       isGlobal: true,

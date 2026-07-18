@@ -25,7 +25,7 @@ export class SlackService {
     @InjectModel(SlackUserProfile)
     private readonly slackUserProfileModel: typeof SlackUserProfile
   ) {
-    this.webClient = new WebClient(this.configService.get('SLACK_BOT_TOKEN'));
+    this.webClient = new WebClient();
   }
 
   /**
