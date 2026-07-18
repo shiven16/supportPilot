@@ -1,162 +1,208 @@
-<div align="center">
-  <h1>SupportPilot</h1>
-  <p><strong>Your AI-powered Slack Assistant for high-velocity engineering teams.</strong></p>
-</div>
+# SupportPilot
 
-SupportPilot bridges the gap between your engineering ecosystem (GitHub, Jira, etc.) and your team's communication hub (Slack). By leveraging state-of-the-art LLMs, developers can request PR summaries, transition ticket statuses, and query project states entirely via natural language without leaving Slack.
+SupportPilot is a multi-tenant Slack AI agent for engineering work. Team members can mention the bot, send it a DM, or use the Slack App Home tab to query and act on connected GitHub and Jira Cloud workspaces.
 
----
+The application is a NestJS service backed by PostgreSQL and Redis. It uses LangChain tool calling: the model can call real integration APIs, inspect returned results, and decide its next action.
 
-## 🚀 Features
+## Current capabilities
 
-- **Conversational AI in Slack:** Talk to SupportPilot naturally in threads or channels to query your engineering stack.
-- **Multi-Tenant Architecture:** Secure OAuth flow supporting multiple isolated Slack workspaces.
-- **Multi-LLM Support:** Built-in adapters for OpenAI, Gemini, Groq, and OpenRouter, allowing you to choose the best LLM for your budget and latency needs.
-- **High Performance:** NestJS backend backed by Redis caching and PostgreSQL for robust state and token management.
-- **Extensible Tooling Pattern:** Easily plug in new integrations (e.g., Jira, GitHub, Notion, PagerDuty).
+- Slack App Home onboarding, integration connection management, access controls, and administrator management.
+- Slack app mentions, DMs, Assistant threads, and threaded replies. The bot adds an eyes reaction before processing supported messages.
+- GitHub tools for repositories, files, issues, pull requests, reviews, commits, branches, and code search.
+- Jira Cloud tools for issue search, issue details, create/update, comments, transitions, assignment, users, and projects.
+- Slack tools for channels, messages, threads, users, reactions, and channel membership.
+- A common date/time tool for relative-date requests.
+- OpenAI-compatible provider selection for OpenAI, Gemini, Groq, and OpenRouter.
+- Per-thread conversation state in PostgreSQL, including plans and recent tool-call results.
+- Cheap acknowledgement filtering, intent/domain classification, domain-scoped tool loading, and tool-level selection before full schemas are bound.
 
-## 🛠 Tech Stack
+## Architecture
 
-- **Backend Framework:** NestJS (TypeScript)
-- **Database:** PostgreSQL (managed via Prisma ORM)
-- **Caching & Background Jobs:** Redis
-- **Infrastructure:** AWS ECS Fargate, ALB, CloudFront, Terraform
-- **CI/CD:** GitHub Actions
-
----
-
-## 📦 Local Development
-
-### Prerequisites
-- Node.js (v18+)
-- PostgreSQL
-- Redis
-- ngrok (for local Slack event routing)
-
-### 1. Clone the repository
-```bash
-git clone https://github.com/shiven16/supportPilot.git
-cd supportPilot
+```text
+Slack event or interaction
+        |
+        v
+NestJS Slack handlers and App Home
+        |
+        v
+Noise filter -> intent/domain classifier -> domain tool selector
+        |
+        v
+LangChain planner and tool-calling agent
+        |
+        +--> GitHub / Jira Cloud / Slack APIs
+        |
+        +--> PostgreSQL conversation and workspace state
+        +--> Redis cache
 ```
 
-### 2. Install Dependencies
+The LLM pipeline first classifies a message from its text alone. It then loads tools only for the selected domain, asks the model to select the smallest useful tool set from names and descriptions, and finally binds full schemas for execution. The execution agent receives real tool results and may make additional tool calls.
+
+`ToolService` caches eligible per-workspace toolsets in memory for 60 seconds. Connection events invalidate the affected workspace cache.
+
+## Technology
+
+- Node.js 22, TypeScript, NestJS 11
+- LangChain and LangGraph
+- PostgreSQL with Sequelize and `sequelize-cli` migrations
+- Redis through Nest cache-manager
+- Slack Web API, Bolt types, and Block Kit builders
+- npm workspaces and local agent packages
+- Docker Compose for local infrastructure
+- Terraform, Amazon ECR, ECS Fargate, ALB, CloudFront, and GitHub Actions for the included AWS deployment path
+
+This project does **not** use Prisma. Database schema changes are JavaScript Sequelize migrations in `src/database/migrations/`.
+
+## Repository layout
+
+```text
+src/
+  database/        Sequelize models, database configuration, migrations
+  integrations/    credential validation, connection persistence, MCP support
+  lib/             shared constants, encryption, Slack utilities, retention
+  llm/             provider selection, classification, planning, tool execution
+  slack/           Slack events, interactions, App Home, Block Kit views
+
+agent-packages/packages/
+  common/          shared tool contracts and date/time tool
+  github/          GitHub LangChain toolkit
+  jira/            Jira Cloud LangChain toolkit
+  slack/           Slack LangChain toolkit
+
+terraform/         AWS infrastructure
+```
+
+Each toolkit is an npm workspace package. The root application links them locally as `supportPilot-*-agent` dependencies.
+
+## Prerequisites
+
+- Node.js 22
+- npm 10 or newer
+- PostgreSQL 13 or newer
+- Redis 7 or newer
+- A publicly reachable HTTPS URL for Slack callbacks in local development, such as an ngrok tunnel
+- A Slack app created from [slack_app_manifest.yml](./slack_app_manifest.yml)
+
+## Configuration
+
+Copy the example file and fill in the values for your environment:
+
+```bash
+cp .env.example .env
+```
+
+At minimum, configure the following values.
+
+| Variable                                                  | Purpose                                                                                                           |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                                    | HTTP listening port. Defaults to `3000`.                                                                          |
+| `SELFSERVER_URL`                                          | Public base URL used by Slack installation and callbacks.                                                         |
+| `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`                  | Slack OAuth app credentials.                                                                                      |
+| `SLACK_SIGNING_SECRET`                                    | Verifies requests to `POST /slack/events`.                                                                        |
+| `SLACK_BOT_TOKEN`                                         | Bot token used to initialize the Slack service.                                                                   |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | PostgreSQL connection settings.                                                                                   |
+| `REDIS_HOST`, `REDIS_PORT`                                | Redis connection settings.                                                                                        |
+| `ENCRYPTION_KEY`                                          | Encryption key for workspace credentials and saved prompts. Set a strong, stable value outside local development. |
+| `AI_PROVIDER_PRIORITY`                                    | Comma-separated provider priority, for example `openai,gemini,groq,openrouter`.                                   |
+
+Set at least one provider API key. Providers are selected in the exact order in `AI_PROVIDER_PRIORITY`; entries without a key are skipped.
+
+| Provider   | Required key         | Optional model/base URL variables                                                       |
+| ---------- | -------------------- | --------------------------------------------------------------------------------------- |
+| OpenAI     | `OPENAI_API_KEY`     | `OPENAI_MODEL`, `OPENAI_BASE_URL`                                                       |
+| Gemini     | `GEMINI_API_KEY`     | `GEMINI_MODEL`, `GEMINI_BASE_URL`                                                       |
+| Groq       | `GROQ_API_KEY`       | `GROQ_MODEL`, `GROQ_BASE_URL`                                                           |
+| OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL`, `OPENROUTER_SITE_URL`, `OPENROUTER_APP_NAME` |
+
+Gemini, Groq, and OpenRouter are configured through OpenAI-compatible chat-completion endpoints. Workspace-level OpenAI keys can also be added from the App Home tab.
+
+## Local development
+
+Install root dependencies, build the local agent packages, and apply database migrations before starting NestJS:
+
 ```bash
 npm install
-```
-
-### 3. Environment Configuration
-Create a `.env` file in the root directory and populate it with the required keys:
-
-```env
-# Database & Cache
-DATABASE_URL="postgresql://user:password@localhost:5432/supportpilot?schema=public"
-REDIS_URL="redis://localhost:6379"
-
-# Slack Credentials
-SLACK_CLIENT_ID="your_slack_client_id"
-SLACK_CLIENT_SECRET="your_slack_client_secret"
-SLACK_SIGNING_SECRET="your_slack_signing_secret"
-SELFSERVER_URL="https://your-ngrok-url.ngrok-free.app"
-
-# LLM Providers (Add whichever you intend to use)
-OPENAI_API_KEY="sk-..."
-GEMINI_API_KEY="..."
-GROQ_API_KEY="..."
-```
-
-### 4. Database Setup
-Apply migrations and generate the Prisma client:
-```bash
-npx prisma generate
-npx prisma migrate dev
-```
-
-### 5. Start the Server
-```bash
-# Start in watch mode for development
+npm run build:packages
+npm run db:migrate
 npm run start:dev
 ```
 
----
+`start:dev` watches NestJS source only. Re-run `npm run build:packages` after changing code under `agent-packages/`.
 
-## 🔌 How to Integrate Another Tool
-
-SupportPilot is designed with a highly extensible architecture, making it easy to add new integrations (like PagerDuty, Notion, or Linear) that the LLM can trigger as "tools".
-
-Follow these steps to add a new tool integration:
-
-### 1. Create the Integration Module
-Create a new folder in your `src/` directory for the tool (e.g., `src/pagerduty`). Scaffold a module and service using the NestJS CLI:
+Useful commands:
 
 ```bash
-nest g module pagerduty
-nest g service pagerduty
+npm run build:packages  # Compile common, GitHub, Jira, and Slack agent packages
+npm run build           # Compile the NestJS application
+npm test                # Run Jest tests
+npm run db:migrate      # Apply Sequelize migrations
+npm run db:migrate:undo # Revert the most recent migration
 ```
 
-### 2. Define the API Interactions
-Inside your new `pagerduty.service.ts`, implement the logic required to interact with the third-party API. Ensure you handle authentication securely (preferably by storing tenant-specific access tokens in the database, similar to the `slack_workspaces` table).
+### Local Docker services
 
-```typescript
-import { Injectable } from '@nestjs/common';
-import axios from 'axios';
+The included Compose file starts the app, PostgreSQL, and Redis:
 
-@Injectable()
-export class PagerDutyService {
-  async getOnCallPerson(workspaceId: string) {
-    // 1. Fetch credentials for the workspace from DB
-    // 2. Make API call to PagerDuty
-    // 3. Return structured data to the LLM
-  }
-}
+```bash
+docker compose -f docker-compose.local.yml up --build
 ```
 
-### 3. Register the Tool with the LLM Router
-Locate the service responsible for routing LLM prompts (often the core bot/LLM service). You need to expose your new integration to the LLM by defining a **Tool Schema** (JSON Schema).
+For a fresh local database, start PostgreSQL and Redis first, apply migrations from the host, then start the app:
 
-When initializing your LLM client (e.g., OpenAI or Gemini), pass the schema:
-
-```typescript
-const tools = [
-  {
-    type: "function",
-    function: {
-      name: "get_on_call_person",
-      description: "Retrieves the currently on-call engineer from PagerDuty",
-      parameters: {
-        type: "object",
-        properties: {
-          team: { type: "string", description: "The name of the engineering team" }
-        },
-        required: ["team"],
-      }
-    }
-  }
-];
+```bash
+docker compose -f docker-compose.local.yml up -d postgres redis
+DB_HOST=localhost npm run db:migrate
+docker compose -f docker-compose.local.yml up --build app
 ```
 
-### 4. Handle the LLM Function Call
-When the LLM decides to invoke your tool, it will return a `tool_call` payload. Intercept this in your LLM orchestration service and route it to the service you created in Step 2.
+The production Docker image intentionally omits development dependencies, including `sequelize-cli`; run migrations from the host or CI rather than inside that final image.
 
-```typescript
-if (toolCall.function.name === 'get_on_call_person') {
-    const args = JSON.parse(toolCall.function.arguments);
-    const result = await this.pagerDutyService.getOnCallPerson(args.team);
-    
-    // Return the result back to the LLM to formulate the final Slack message!
-}
-```
+## Slack setup
 
-By following this pattern, you can continually teach the AI new capabilities without modifying the core Slack event orchestration.
+1. In Slack, create an app from [slack_app_manifest.yml](./slack_app_manifest.yml).
+2. Replace the manifest placeholders with your public URLs:
+   - Redirect URL: `https://your-host/slack/install`
+   - Event request URL: `https://your-host/slack/events`
+   - Interactivity request URL: `https://your-host/slack/interactions`
+3. Copy the Slack client ID, client secret, signing secret, and bot token into `.env`.
+4. Start SupportPilot, then open `https://your-host/slack/install` to install it in a workspace.
+5. Open the SupportPilot App Home tab to configure access, admins, LLM keys, and integrations.
 
----
+The public health endpoints are `GET /health` and `GET /api/health`.
 
-## ☁️ Deployment
+## Connecting integrations
 
-The infrastructure is provisioned via **Terraform** inside the `/terraform` folder, designed to run on AWS ECS Fargate with a CloudFront HTTPS proxy. 
+Connections are saved per Slack workspace. Credential fields are encrypted before persistence.
 
-Every push to the `main` branch automatically triggers the `.github/workflows/deploy.yml` pipeline, which:
-1. Builds a new Docker image.
-2. Pushes it to AWS ECR.
-3. Deploys the new revision to ECS Fargate.
+### GitHub
 
-> **Note:** The `SELFSERVER_URL` in production must point to the CloudFront distribution URL to properly handle Slack OAuth redirects.
+Connect GitHub from App Home with a Personal Access Token. The connection form validates the token with GitHub's `/user` API. A token with `repo` and `read:user` permissions is required for the supported private-repository and user operations. You can optionally set a default repository, owner, and tool instruction.
+
+### Jira Cloud
+
+Connect Jira from App Home with:
+
+- Jira Cloud URL, such as `https://your-team.atlassian.net`
+- Atlassian account email
+- Atlassian API token
+- optional default project key and custom tool instruction
+
+The connection is validated with Jira REST API v3. Jira uses Basic Auth with the configured email and API token; no Jira OAuth client credentials are required.
+
+## Adding an integration
+
+Agent capabilities live in isolated packages under `agent-packages/packages/`. A new toolkit should expose a `Toolkit` through `supportPilot-common-agent`, define Zod schemas, wrap functions with LangChain `tool()`, and return compact API results.
+
+To make a new integration available in the application, add its package to the root npm workspaces and local dependencies, register its connected configuration and toolkit in `src/llm/tool.service.ts`, and add the workspace connection flow and persistence model/migration. The classifier derives its configured domains from `INTEGRATIONS`.
+
+## Deployment
+
+The repository includes Terraform and a deployment workflow for AWS. On pushes to `main`, [deploy.yml](./.github/workflows/deploy.yml) performs the following:
+
+1. Applies the Terraform configuration.
+2. Builds and pushes the Docker image to Amazon ECR.
+3. Installs npm dependencies and applies Sequelize migrations.
+4. Renders a new ECS task definition with configured secrets.
+5. Deploys the revision to the SupportPilot ECS service.
+
+Terraform provisions the VPC networking, ALB, ECR repository, ECS cluster and Fargate service, CloudWatch logs, and CloudFront distribution. The workflow requires AWS credentials, an existing Terraform state bucket, database and Redis credentials, Slack credentials, `SELFSERVER_URL`, and whichever LLM provider keys are enabled.
