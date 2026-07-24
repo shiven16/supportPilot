@@ -20,7 +20,11 @@ import { SupportPilotAgent } from './supportpilot-agent';
 import slackify = require('slackify-markdown');
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { z } from 'zod';
-import { ChatPromptTemplate, HumanMessagePromptTemplate } from '@langchain/core/prompts';
+import {
+  ChatPromptTemplate,
+  HumanMessagePromptTemplate,
+  MessagesPlaceholder
+} from '@langchain/core/prompts';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { invokeWithStructuredOutput } from './utils';
 
@@ -98,12 +102,12 @@ export class LlmService {
                 ? call.result
                 : (call.result?.kwargs?.content ??
                   (call.result ? JSON.stringify(call.result) : ''));
-            
+
             // Truncate massive JSON blobs from previous tool calls to prevent token limit errors
             if (resultContent.length > 500) {
               resultContent = resultContent.substring(0, 500) + '... [TRUNCATED]';
             }
-            
+
             return `Tool "${call.name}" with args ${JSON.stringify(call.args)} returned: ${resultContent}`;
           })
           .join('; ')}`
@@ -168,7 +172,12 @@ export class LlmService {
     }
 
     if (classification.intent === 'chat' || classification.domain === 'none') {
-      const response = await this.generateDirectResponse(message, llm, authorName);
+      const response = await this.generateDirectResponse(
+        message,
+        previousMessages,
+        llm,
+        authorName
+      );
       conversationState.message_count++;
       await conversationState.save();
       return slackify(response);
@@ -203,7 +212,7 @@ export class LlmService {
       enhancedPreviousMessages: encryptForLogs(JSON.stringify(enhancedPreviousMessages))
     });
 
-    const selectedTools = await this.selectTools(message, tools, llm);
+    const selectedTools = await this.selectTools(message, tools, enhancedPreviousMessages, llm);
     this.logger.log('Lightweight tool selection complete', {
       selectedToolNames: selectedTools.selectedToolNames,
       reason: encryptForLogs(selectedTools.reason)
@@ -360,6 +369,7 @@ Infer the domain from intent even when the app name is not mentioned. For exampl
   private async selectTools(
     message: string,
     tools: NonNullable<Awaited<ReturnType<ToolService['getAvailableTools']>>>,
+    previousMessages: LLMContext[],
     llm: BaseChatModel
   ): Promise<ToolSelectionResult> {
     const summaries = Object.values(tools)
@@ -384,6 +394,7 @@ Critical dependencies:
 
 Available tools:
 ${summaries}`),
+      new MessagesPlaceholder('chat_history'),
       HumanMessagePromptTemplate.fromTemplate('{input}')
     ]);
     try {
@@ -394,7 +405,7 @@ ${summaries}`),
           selectedToolNames: z.array(z.string()),
           reason: z.string()
         }),
-        { input: message }
+        { chat_history: previousMessages, input: message }
       );
       const normalizedAllNames = allToolNames.map(name => ({ original: name, normalized: name.toLowerCase().replace(/[^a-z0-9]/g, '') }));
       
@@ -429,15 +440,20 @@ ${summaries}`),
 
   private async generateDirectResponse(
     message: string,
+    previousMessages: LLMContext[],
     llm: BaseChatModel,
     authorName: string
   ): Promise<string> {
     const prompt = ChatPromptTemplate.fromMessages([
       new SystemMessage(SupportPilotPrompts.directResponsePrompt(authorName)),
+      new MessagesPlaceholder('chat_history'),
       HumanMessagePromptTemplate.fromTemplate('{input}')
     ]);
     const chain = RunnableSequence.from([prompt, llm]);
-    const result = await chain.invoke({ input: message });
+    const result = await chain.invoke({
+      chat_history: previousMessages,
+      input: message
+    });
     return Array.isArray(result.content) ? result.content.join(' ') : result.content;
   }
 }
